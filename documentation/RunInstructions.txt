@@ -1,0 +1,68 @@
+Setup Instructions:
+Automatic [Recommended]:
+Step 0 - Clone WhisNemo Repo
+git clone https://github.com/humanlab/WhisNemo.git
+cd WhisNemo
+
+Step 1 - Setup Conda Env
+cd WhisNemo/documentation/
+conda env create -f whisnemo_conda_env.yaml
+conda activate nemo
+cd ..
+
+Step 2 - Follow Run Instructions below
+
+Manually [Skip if Doing it Automatic]:
+Step 0 - Clone WhisNemo Repo
+git clone https://github.com/humanlab/WhisNemo.git
+cd WhisNemo
+
+Step 1 - Setup Conda Env
+cd WhisNemo/documentation/
+conda env create -f whisnemo_conda_env.yaml
+conda activate nemo
+cd ..
+
+Step 2 - Clone Whisper Diarization Repo
+git clone https://github.com/MahmoudAshraf97/whisper-diarization.git
+cd whisper-diarization
+git checkout f18edd3
+
+Step 3 - Make appropriate changes to files in whisper-diarization checkpoint
+File 1: nemo_msdd_configs/diar_infer_telephonic.yaml
++      infer_batch_size: 15 # Batch size for MSDD inference.
++      max_num_speakers: 2 # Max number of speakers for each recording. If an oracle number of speakers is passed, this value is ignored.
+
+File 2: nemo_msdd_configs/diar_infer_meeting.yaml
++      max_num_speakers: 2 # Max number of speakers for each recording. If an oracle number of speakers is passed, this value is ignored.
++      infer_batch_size: 15 # Batch size for MSDD inference. 
++      infer_batch_size: 15 # Batch size for MSDD inference. 
++      infer_batch_size: 15 # Batch size for MSDD inference. 
+
+File 3 : diarize.py
+-        f'python3 -m demucs.separate -n htdemucs --two-stems=vocals "{args.audio}" -o "temp_outputs"'
++        f'python3 -m demucs.separate -n htdemucs --two-stems=vocals "{args.audio}" -o "{output_dir}"'
+
+-            "temp_outputs",
++            output_dir,
+
+-temp_path = os.path.join(ROOT, "temp_outputs")
++temp_path = os.path.join(ROOT, output_dir)
+
+File 4: nemo_msdd_configs/diar_infer_general.yaml
+-      max_num_speakers: 8 # Max number of speakers for each recording. If an oracle number of speakers is passed, this value is ignored.
++      max_num_speakers: 2 # Max number of speakers for each recording. If an oracle number of speakers is passed, this value is ignored.
+
+-      infer_batch_size: 25 # Batch size for MSDD inference. 
++      infer_batch_size: 15 # Batch size for MSDD inference. 
+
+
+Run Instructions
+Pre-requisites: Place audio files [mp3 and other formats] in a particular dir
+Note: Ensure no two files have the same name irrespective of different extensions
+
+If you want to run a batch of inputs with the audio files present in a folder:
+./src/whisnemo_pipeline_batch_v1.0.sh "/cronus_data/hitop/iHiTOP_transcripts/HiTOP/Audio/test" 0 1 50 1
+
+If you want to run a specific set of audio files:
+./src/whisnemo_specific_v1.0.sh 0 "/cronus_data/hitop/iHiTOP_transcripts/HiTOP/Audio/test/file1" "/cronus_data/hitop/iHiTOP_transcripts/HiTOP/Audio/test/file2" 1
