@@ -1,3 +1,81 @@
+# To clone repo and the dependent whisper-diarization repo
+git clone git@github.com:humanlab/WhisNemo.git
+cd WhisNemo
+conda create -n whisnemo python=3.10 -y
+conda activate whisnemo
+# Optional: export PIP_CACHE_DIR=/cronus_data/araghavan/.cache/pip
+git clone https://github.com/MahmoudAshraf97/whisper-diarization.git
+cd whisper-diarization
+git checkout f18edd3
+cd ..
+
+## Edit config and code of whisper-diarization
+# Add time import
+sed -i '1 a\import time' whisper-diarization/diarize.py
+
+# Add directory and timestamp handling
+sed -i '/args = parser.parse_args()/a\
+# Get the directory of the current script\
+script_dir = os.path.dirname(os.path.realpath(__file__))\
+timestamp = time.strftime("%Y%m%d_%H%M%S")\
+output_dir = os.path.join(script_dir, f"temp_outputs_{timestamp}")' whisper-diarization/diarize.py
+
+# Replace temp_outputs with output_dir
+sed -i 's/"{args.audio}" -o "temp_outputs"/"{args.audio}" -o "{output_dir}"/g' whisper-diarization/diarize.py
+sed -i 's/"temp_outputs",/output_dir,/g' whisper-diarization/diarize.py
+sed -i 's/temp_path = os.path.join(ROOT, "temp_outputs")/temp_path = os.path.join(ROOT, output_dir)/' whisper-diarization/diarize.py
+
+# Update max_num_speakers to 2 in all config files
+sed -i 's/max_num_speakers: 8/max_num_speakers: 2/' whisper-diarization/nemo_msdd_configs/diar_infer_*.yaml
+
+# Reduce infer_batch_size to 15 in all config files
+sed -i 's/infer_batch_size: 25/infer_batch_size: 15/' whisper-diarization/nemo_msdd_configs/diar_infer_*.yaml
+
+
+# Packages/Libraries to be installed
+pip install cython==3.0.11
+pip install wget==3.2
+pip install nemo_toolkit==1.20.0
+pip install git+https://github.com/m-bain/whisperX.git@78dcfaab51005aa703ee21375f81ed31bc248560
+pip install git+https://github.com/adefossez/demucs.git@b9ab48cad45976ba42b2ff17b229c071f0df9390
+pip install git+https://github.com/oliverguhr/deepmultilingualpunctuation.git@5a0dd7f4fd56687f59405aa8eba1144393d8b74b
+pip install git+https://github.com/MahmoudAshraf97/ctc-forced-aligner.git@abd458dd879305566cd4ed0c8624c95f22e3126a
+pip install huggingface-hub==0.23.2
+pip install ctranslate2==3.24.0
+pip install PyYAML
+pip install hydra-core==1.3.2
+pip install youtokentome==1.0.6
+pip install inflect==7.4.0
+pip install webdataset==0.2.100
+pip install editdistance==0.8.1
+pip install jiwer==3.0.5
+pip install ffmpeg==1.4
+pip install pytorch-lightning==1.9.4; \
+pip install ipython==8.31.0
+pip install ffmpeg-python==0.2.0
+
+# Specific to Cronus for 11.8
+pip install torch==2.1.0+cu118 torchaudio==2.1.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+
+
+# If youtokentome library throws an error
+# export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+# ln -sf /usr/lib/x86_64-linux-gnu/libstdc++.so.6 /chronos_data/araghavan/.conda/envs/whisnemo/bin/../lib/libstdc++.so.6
+
+
+## Sample Commands:
+# For A Folder
+# ./src/whisnemo_pipeline_batch_v1.0.sh "/cronus_data/hitop/iHiTOP_transcripts/HiTOP/Audio/test2" 3 1 1 10 
+
+# For Specific File(s)
+# ./src/whisnemo_specific_v1.0.sh 2 1 "/cronus_data/hitop/iHiTOP_transcripts/HiTOP/Audio/test3/P439_12202023_PM_8928.mp3" "/cronus_data/hitop/iHiTOP_transcripts/HiTOP/Audio/test3/P355_10242023_JL_6144_.mp3"
+
+
+# To remove existing clone of repo and environment
+# cd /cronus_data/araghavan && conda activate base && rm -rf WhisNemo && conda remove -n whisnemo --all -y && rm -rf /cronus_data/araghavan/.cache/pip 
+
+
+## Ignore the rest below:
 Setup Instructions:
 Automatic [Recommended]:
 Step 0 - Clone WhisNemo Repo

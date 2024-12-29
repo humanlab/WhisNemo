@@ -1,8 +1,8 @@
 #!/bin/bash
 
 if [ $# -lt 2 ]; then
-    echo "Usage: $0 cuda_device_map audio_file1 [audio_file2 ...] [try_limit=2]"
-    echo "Example: ./whisnemo_specific_v1.0.sh 0 file1.wav file2.mp4 file3.wav 1"
+    echo "Usage: $0 cuda_device_map try_limit audio_file1 [audio_file2 ...]"
+    echo "Example: ./whisnemo_specific_v1.0.sh 0 1 file1.wav file2.mp4 file3.wav"
     echo "The above runs the script on the specified audio files using CUDA device 0, with a try limit of 1 (default is 2)."
     exit 1
 fi
@@ -77,7 +77,7 @@ retry_oom_fail_file() {
             split_done_file="${l_temp_done_dir}/${split_audio_prefix}${i}.done"
             
             CUDA_VISIBLE_DEVICES=${cuda_device_map} python "${script_dir}/../whisper-diarization/diarize.py" -a "${split_file}" \
-            && touch "${split_done_file}" &
+            && echo "Finished Diarizing Split-File: ${split_file}" && touch "${split_done_file}" &
         done
 
         # Wait for all background jobs to finish
@@ -111,9 +111,9 @@ retry_oom_fail_file() {
 }
 
 # Main script starts here
-cuda_device_map="$1"
-try_limit="${!#}" # Last argument is the try limit if provided
-shift
+cuda_device_map="$1" # First argument is the cuda device map
+try_limit="$2" # Second argument is the try limit
+shift 2
 
 # Process each audio file
 for file in "$@"; do
@@ -140,6 +140,7 @@ for file in "$@"; do
         echo "Attempt: ${attempt_counter}; File: ${file}"
 
         CUDA_VISIBLE_DEVICES=${cuda_device_map} python "${script_dir}/../whisper-diarization/diarize.py" -a "${file}" && \
+        echo "Finished Diarizing File: ${file}" && \
         touch "${done_file}" && \
         python "${script_dir}/format_nemo_srt_to_csv.py" "${srt_file}"
 

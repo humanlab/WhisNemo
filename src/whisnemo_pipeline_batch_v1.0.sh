@@ -1,14 +1,14 @@
 #!/bin/bash
 if [ $# -lt 4 ]; then
-    echo "Usage: $0 audio_dir cuda_device_map start_idx end_idx [try_limit=2]"
+    echo "Usage: $0 audio_dir cuda_device_map try_limit start_idx end_idx "
     
-    echo 'Example: ./whisnemo_pipeline_batch_v1.0.sh "../data" 0 2 2 1'
+    echo 'Example: ./whisnemo_pipeline_batch_v1.0.sh "../data" 0 1 2 2'
     echo "The above runs the whisnemo_pipeline_v2.1.sh script on audio files in the ../data directory on \
-cuda device 0, processing non-srt, non-csv, and non-txt files (e.g., wav, mp4) \
+cuda device 0, with a try limit of 1, processing non-srt, non-csv, and non-txt files (e.g., wav, mp4) \
 from the 2nd (inclusive) to the 2nd (inclusive) file, sorted lexicographically (dictionary order)."
 
     echo "Note: start_idx and end_idx are 1-indexed and inclusive."
-    echo "The try limit is set to 2 by default, but can be specified as the 5th argument."
+    echo "The try limit is specified as the 3rd argument."
     echo "Beyond try limit, the file is attempted to succeed by performing the following:"
     echo "Split audio file, transcribe and diarize each of the splits, combine diarized splits"
     exit 1
@@ -127,9 +127,9 @@ retry_oom_fail_file() {
 # Main script starts here
 audio_dir="${1%/}"
 cuda_device_map="$2"
-start="$3"
-end="$4"
-try_limit="${5:-2}"
+try_limit="${3:-2}"
+start="$4"
+end="$5"
 
 done_dir="${audio_dir%/}_runstatus/"
 mkdir -p "$done_dir"
