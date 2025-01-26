@@ -303,7 +303,7 @@ def read_diarization_output(temp_dir: str) -> List[List[int]]:
     return speaker_ts
 
 
-def process_splits(audio_file: str, args: argparse.Namespace) -> None:
+def process_splits(audio_file: str, args: dict) -> None:
     """
     Split an audio file and process the resulting splits if OOM can't be resolved on the entire file.
     If a split file also fails (e.g., OOM again), abort further splitting, clean up, and return.
@@ -321,7 +321,7 @@ def process_splits(audio_file: str, args: argparse.Namespace) -> None:
 
     for split_file in split_files:
         logging.info(f"Processing split file: {split_file}")
-        split_audio_output_dir = os.path.dirname(split_file) if args.output_dir is None else args.output_dir
+        split_audio_output_dir = os.path.dirname(split_file) if args["output_dir"] is None else args["output_dir"]
         split_audio_file_csv_path = get_op_csv_path(split_file, split_audio_output_dir)
         
         try:
@@ -516,12 +516,12 @@ def run_diarization_in_subprocess(audio_waveform: torch.Tensor, temp_dir: str, d
 # PART 3: MAIN PROCESSING LOGIC (TRANSCRIBE, ALIGN, DIARIZE, RETRIES)
 # ---------------------------------------------------------------------
 
-def process_file(audio_file: str, args: argparse.Namespace) -> None:
+def process_file(audio_file: str, args: dict) -> None:
     """
     Process a single audio file for transcription, alignment, and diarization
     (with the diarization step in a subprocess).
     """
-    output_dir = os.path.dirname(audio_file) if args.output_dir is None else args.output_dir
+    output_dir = os.path.dirname(audio_file) if args["output_dir"] is None else args["output_dir"]
     txt_path = get_op_txt_path(audio_file, output_dir)
     srt_path = get_op_srt_path(audio_file, output_dir)
     csv_path = get_op_csv_path(audio_file, output_dir)
@@ -532,24 +532,24 @@ def process_file(audio_file: str, args: argparse.Namespace) -> None:
     os.makedirs(temp_dir, exist_ok=True)
     try:
         # 1. Optional Preprocessing with Demucs
-        vocal_target = preprocess_audio_for_diarization(audio_file, temp_dir, args.stemming)
+        vocal_target = preprocess_audio_for_diarization(audio_file, temp_dir, args["stemming"])
         logging.info(f"Preprocessing completed for file: {audio_file}")
 
         # 2. Transcription with Whisper
         whisper_results, language, audio_waveform = transcribe_audio(
-            vocal_target, args.language, args.batch_size, args.model_name, 
-            args.suppress_numerals, args.device
+            vocal_target, args["language"], args["batch_size"], args["model_name"], 
+            args["suppress_numerals"], args["device"]
         )
         logging.info(f"Transcription completed for file: {audio_file}")
 
         # 3. Forced Alignment
         word_timestamps, audio_waveform = perform_forced_alignment(
-            audio_waveform, whisper_results, args.device, language, batch_size=args.batch_size
+            audio_waveform, whisper_results, args["device"], language, batch_size=args["batch_size"]
         )
         logging.info(f"Forced alignment completed for file: {audio_file}")
 
         # 4. Diarization in a Subprocess
-        diar_success = run_diarization_in_subprocess(audio_waveform, temp_dir, args.device)
+        diar_success = run_diarization_in_subprocess(audio_waveform, temp_dir, args["device"])
         if not diar_success:
             # Raise a MemoryError so we can catch it specifically for OOM logic
             raise MemoryError("Diarization worker failed (OOM or other error).")
@@ -569,13 +569,13 @@ def process_file(audio_file: str, args: argparse.Namespace) -> None:
         cleanup(temp_dir)
 
 
-def process_retry(audio_file: str, args: argparse.Namespace) -> None:
+def process_retry(audio_file: str, args: dict) -> None:
     """
     Manage retries for processing a single audio file
     (including detection of OOM and possibly splitting the audio).
     """
     retries = 0
-    max_retries = args.max_retries if not is_split_file(audio_file) else args.max_oom_retries
+    max_retries = args["max_retries"] if not is_split_file(audio_file) else args["max_oom_retries"]
     cuda_oom_error = False
 
     while retries < max_retries:
@@ -604,32 +604,32 @@ def process_retry(audio_file: str, args: argparse.Namespace) -> None:
         process_splits(audio_file, args)
 
 
-def process_audio_files(audio_files: List[str], args: argparse.Namespace) -> None:
+def process_audio_files(audio_files: List[str], args: dict) -> None:
     """
     Process multiple audio files. Skip files that already have final CSV unless --rerun-completed-audio-file is set.
     """
     for audio_file in audio_files:
-        output_csv = get_op_csv_path(audio_file, args.output_dir)
-        if args.rerun_completed_audio_file or not os.path.isfile(output_csv):
+        output_csv = get_op_csv_path(audio_file, args["output_dir"])
+        if args["rerun_completed_audio_file"] or not os.path.isfile(output_csv):
             logging.info(f"Processing audio file: {audio_file}")
             process_retry(audio_file, args)
         else:
             logging.info(f"Skipping already completed file: {audio_file}")
 
 
-def main(args: argparse.Namespace) -> None:
+def main(args: dict) -> None:
     """
     Main entry point for processing audio files.
     """
     supported_audio_formats = (".wav", ".mp3", ".m4a")  # Extend if needed
-    if os.path.isdir(args.audio):
+    if os.path.isdir(args["audio"]):
         audio_files = [
-            os.path.join(args.audio, f)
-            for f in os.listdir(args.audio)
+            os.path.join(args["audio"], f)
+            for f in os.listdir(args["audio"])
             if f.endswith(supported_audio_formats)
         ]
     else:
-        audio_files = args.audio.split(",")
+        audio_files = args["audio"].split(",")
         print(f"Files to be diarized are: {audio_files}")
 
     process_audio_files(audio_files, args)
@@ -676,6 +676,8 @@ if __name__ == "__main__":
                         help="Rerun pipeline for already completed audio files.")
     
     args = parser.parse_args()
+    args_dict = vars(args)  # Convert Namespace to dictionary
+    print(args_dict) 
     logging.basicConfig(level=logging.INFO)
 
-    main(args)
+    main(args_dict)
