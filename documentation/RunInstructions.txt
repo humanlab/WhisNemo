@@ -146,3 +146,90 @@ If you want to run a batch of inputs with the audio files present in a folder:
 
 If you want to run a specific set of audio files:
 ./src/whisnemo_specific_v1.0.sh 0 "/cronus_data/hitop/iHiTOP_transcripts/HiTOP/Audio/test/file1" "/cronus_data/hitop/iHiTOP_transcripts/HiTOP/Audio/test/file2" 1
+
+
+
+#Troubleshooting Common Issues
+
+# Issue 1: WhisperX VAD Model Download Failure
+
+**Error Message:**
+```
+urllib.error.HTTPError: HTTP Error 301: Moved Permanently
+```
+
+**Root Cause:** 
+WhisperX's `transcribe_batched()` function tries to download a Voice Activity Detection (VAD) model from a URL that has been moved permanently:
+```
+https://whisperx.s3.eu-west-2.amazonaws.com/model_weights/segmentation/0b5b3216d60a2d32fc086b47ea8c67589aaeb26b7e07fcbe620d6d0b83e209ea/pytorch_model.bin
+```
+
+**Solution:**
+Modify `whisper-diarization/diarize.py` to use `transcribe()` instead of `transcribe_batched()`:
+
+1. **Change the import (around line 28):**
+```python
+# FROM:
+from transcription_helpers import transcribe_batched
+
+# TO:
+from transcription_helpers import transcribe
+import whisperx
+```
+
+2. **Change the transcription call (around lines 115-122):**
+```python
+# FROM:
+whisper_results, language, audio_waveform = transcribe_batched(
+    vocal_target,
+    args.language,
+    args.batch_size,
+    args.model_name,
+    mtypes[args.device],
+    args.suppress_numerals,
+    args.device,
+)
+
+# TO:
+whisper_results, language = transcribe(
+    vocal_target,
+    args.language,
+    args.model_name,
+    mtypes[args.device],
+    args.suppress_numerals,
+    args.device,
+)
+
+# Load audio waveform separately since transcribe doesn't return it
+audio_waveform = whisperx.load_audio(vocal_target)
+```
+
+**Note:** This provides identical transcription results, just potentially slightly slower than batched processing.
+
+### Issue 2: cuDNN Version Incompatibility
+
+**Error Message:**
+```
+RuntimeError: cuDNN version incompatibility: PyTorch was compiled against (8, 7, 0) but found runtime version (8, 2, 2)
+```
+
+**Root Cause:** 
+System has cuDNN 8.2.2 installed, but PyTorch expects cuDNN 8.7.0. The system's older cuDNN is being loaded instead of PyTorch's bundled version.
+
+**Solution:**
+Force PyTorch to use its own bundled cuDNN libraries by setting the library path:
+
+```bash
+# For your specific environment, adjust the path accordingly:
+export LD_LIBRARY_PATH="/path/to/your/conda/env/lib/python3.10/site-packages/torch/lib"
+
+# Example for whisnemo environment:
+export LD_LIBRARY_PATH="/chronos_data/dumrania/whisnemo_env/lib/python3.10/site-packages/torch/lib"
+```
+
+**Verification:**
+Test that both fixes work:
+```bash
+python -c "import torch; print('CUDA:', torch.cuda.is_available()); print('cuDNN:', torch.backends.cudnn.version())"
+```
+Should show: `CUDA: True` and `cuDNN: 8700`
