@@ -1,8 +1,5 @@
 """
 Main diarization pipeline — ported from whisper-diarization/diarize.py.
-
-This is the single-file pipeline that matches your bash script's
-`python diarize.py -a file.mp3` call exactly.
 """
 
 import argparse
@@ -16,7 +13,6 @@ import csv
 from datetime import datetime
 
 # --- cuDNN preload (must happen before any torch/NeMo imports) ---
-# Auto-detect torch lib path instead of hardcoding
 import importlib.util
 _torch_spec = importlib.util.find_spec("torch")
 if _torch_spec and _torch_spec.origin:
@@ -56,6 +52,7 @@ from whisnemo.core.helpers import (
 )
 from whisnemo.core.transcription_helpers import transcribe
 from whisnemo.core.timing_utils import setup_timing
+from whisnemo.core.format_srt import format_srt_to_csv
 import whisperx
 
 mtypes = {"cpu": "int8", "cuda": "float16"}
@@ -63,15 +60,35 @@ mtypes = {"cpu": "int8", "cuda": "float16"}
 
 def run_diarize(audio_path, stemming=True, suppress_numerals=False,
                 model_name="medium.en", batch_size=8, language=None,
-                device="cuda"):
+                device="cuda",
+                # Output format selection (default: csv only)
+                output_formats=None,
+                # Stutter removal (opt-in)
+                remove_stutters=False, stutter_threshold=0.8,
+                # NeMo config params
+                num_speakers=2, oracle_num_speakers=True,
+                vad_model="vad_multilingual_marblenet",
+                speaker_model="titanet_large",
+                onset=0.8, offset=0.5, pad_offset=-0.05,
+                domain_type="telephonic"):
     """
     Run the full diarization pipeline on a single audio file.
 
-    This replicates your diarize.py script exactly:
-    Demucs → Whisper (non-batched) → CTC alignment → NeMo MSDD → speaker mapping → TXT/SRT output
-
-    All outputs (.txt, .srt) are written next to the audio file.
+    Args:
+        output_formats: List of output formats to produce. Options: "csv", "txt", "srt".
+                        Default (None) = ["csv"] only.
+        remove_stutters: If True, run stutter removal on the CSV output.
+        stutter_threshold: Similarity threshold for stutter removal (0.0-1.0).
+        num_speakers: Expected number of speakers in manifest.
+        oracle_num_speakers: Whether to use oracle num speakers in clustering.
+        vad_model: NeMo VAD model name.
+        speaker_model: NeMo speaker embedding model name.
+        onset/offset/pad_offset: VAD parameters.
+        domain_type: NeMo config domain type (telephonic, meeting, general).
     """
+    if output_formats is None:
+        output_formats = ["csv"]
+
     audio_filename, timing_csv, log_timing = setup_timing(audio_path, "diarization")
     attempt_num = int(os.environ.get('WHISNEMO_ATTEMPT', '1'))
 
@@ -153,9 +170,19 @@ def run_diarize(audio_path, stemming=True, suppress_numerals=False,
     end_time = time.time()
     log_timing("audio_conversion_mono", start_time, end_time)
 
-    # --- 5. NeMo MSDD diarization ---
+    # --- 5. NeMo MSDD diarization (with configurable params) ---
     start_time = time.time()
-    msdd_model = NeuralDiarizer(cfg=create_config(temp_path)).to(device)
+    msdd_model = NeuralDiarizer(cfg=create_config(
+        temp_path,
+        num_speakers=num_speakers,
+        oracle_num_speakers=oracle_num_speakers,
+        vad_model=vad_model,
+        speaker_model=speaker_model,
+        onset=onset,
+        offset=offset,
+        pad_offset=pad_offset,
+        domain_type=domain_type,
+    )).to(device)
     msdd_model.diarize()
 
     del msdd_model
@@ -207,16 +234,40 @@ def run_diarize(audio_path, stemming=True, suppress_numerals=False,
     end_time = time.time()
     log_timing("punctuation_restoration", start_time, end_time)
 
-    # --- 8. Write outputs ---
+    # --- 8. Write outputs (only requested formats) ---
     start_time = time.time()
     wsm = get_realigned_ws_mapping_with_punctuation(wsm)
     ssm = get_sentences_speaker_mapping(wsm, speaker_ts)
 
-    with open(f"{os.path.splitext(audio_path)[0]}.txt", "w", encoding="utf-8-sig") as f:
-        get_speaker_aware_transcript(ssm, f)
+    base_path = os.path.splitext(audio_path)[0]
 
-    with open(f"{os.path.splitext(audio_path)[0]}.srt", "w", encoding="utf-8-sig") as srt:
-        write_srt(ssm, srt)
+    if "txt" in output_formats:
+        with open(f"{base_path}.txt", "w", encoding="utf-8-sig") as f:
+            get_speaker_aware_transcript(ssm, f)
+        print(f"  Output: {base_path}.txt")
+
+    if "srt" in output_formats or "csv" in output_formats:
+        # SRT is always needed as intermediate for CSV
+        srt_path = f"{base_path}.srt"
+        with open(srt_path, "w", encoding="utf-8-sig") as srt:
+            write_srt(ssm, srt)
+        if "srt" in output_formats:
+            print(f"  Output: {srt_path}")
+
+        if "csv" in output_formats:
+            csv_path = format_srt_to_csv(srt_path)
+            print(f"  Output: {csv_path}")
+
+            # --- Optional stutter removal ---
+            if remove_stutters:
+                from whisnemo.postprocessing.remove_stutters import correct_file_with_similarity
+                result = correct_file_with_similarity(csv_path, stutter_threshold)
+                if result:
+                    print(f"  Stutter removal: removed {result['messages_removed']} repetitions")
+
+        # Clean up SRT if not requested
+        if "srt" not in output_formats and os.path.isfile(srt_path):
+            os.remove(srt_path)
 
     cleanup(temp_path)
     end_time = time.time()
@@ -241,6 +292,26 @@ def main():
     parser.add_argument("--device", dest="device",
                         default="cuda" if torch.cuda.is_available() else "cpu",
                         help="if you have a GPU use 'cuda', otherwise 'cpu'")
+    # Output format
+    parser.add_argument("--formats", nargs="+", default=["csv"],
+                        choices=["csv", "txt", "srt"],
+                        help="Output formats to produce (default: csv)")
+    # Stutter removal
+    parser.add_argument("--remove-stutters", action="store_true", default=False,
+                        help="Run stutter removal on CSV output")
+    parser.add_argument("--stutter-threshold", type=float, default=0.8,
+                        help="Similarity threshold for stutter removal (0.0-1.0)")
+    # NeMo config
+    parser.add_argument("--num-speakers", type=int, default=2)
+    parser.add_argument("--no-oracle-speakers", action="store_false", dest="oracle_num_speakers", default=True,
+                        help="Disable oracle num speakers (let NeMo auto-detect)")
+    parser.add_argument("--vad-model", default="vad_multilingual_marblenet")
+    parser.add_argument("--speaker-model", default="titanet_large")
+    parser.add_argument("--onset", type=float, default=0.8)
+    parser.add_argument("--offset", type=float, default=0.5)
+    parser.add_argument("--pad-offset", type=float, default=-0.05)
+    parser.add_argument("--domain-type", default="telephonic",
+                        choices=["telephonic", "meeting", "general"])
 
     args = parser.parse_args()
 
@@ -252,6 +323,17 @@ def main():
         batch_size=args.batch_size,
         language=args.language,
         device=args.device,
+        output_formats=args.formats,
+        remove_stutters=args.remove_stutters,
+        stutter_threshold=args.stutter_threshold,
+        num_speakers=args.num_speakers,
+        oracle_num_speakers=args.oracle_num_speakers,
+        vad_model=args.vad_model,
+        speaker_model=args.speaker_model,
+        onset=args.onset,
+        offset=args.offset,
+        pad_offset=args.pad_offset,
+        domain_type=args.domain_type,
     )
 
 

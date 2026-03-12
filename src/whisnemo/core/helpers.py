@@ -74,17 +74,25 @@ def _get_config_dir():
     return os.path.join(os.path.dirname(os.path.dirname(__file__)), "configs")
 
 
-def create_config(output_dir):
+def create_config(
+    output_dir,
+    num_speakers=2,
+    oracle_num_speakers=True,
+    vad_model="vad_multilingual_marblenet",
+    speaker_model="titanet_large",
+    onset=0.8,
+    offset=0.5,
+    pad_offset=-0.05,
+    domain_type="telephonic",
+):
     """
-    Create NeMo MSDD config — YOUR exact settings:
-    - oracle_num_speakers = True
-    - num_speakers = 2 in manifest
-    - vad_multilingual_marblenet (not v2.0)
-    - onset=0.8, offset=0.5
+    Create NeMo MSDD diarization config.
+
+    All parameters have defaults matching the tested production settings.
+    Override any of them via CLI flags or function arguments.
     """
-    DOMAIN_TYPE = "telephonic"
     CONFIG_LOCAL_DIRECTORY = _get_config_dir()
-    CONFIG_FILE_NAME = f"diar_infer_{DOMAIN_TYPE}.yaml"
+    CONFIG_FILE_NAME = f"diar_infer_{domain_type}.yaml"
     MODEL_CONFIG_PATH = os.path.join(CONFIG_LOCAL_DIRECTORY, CONFIG_FILE_NAME)
 
     if not os.path.exists(MODEL_CONFIG_PATH):
@@ -102,7 +110,7 @@ def create_config(output_dir):
 
     meta = {
         "audio_filepath": os.path.join(output_dir, "mono_file.wav"),
-        "num_speakers": 2,
+        "num_speakers": num_speakers,
         "offset": 0,
         "duration": None,
         "label": "infer",
@@ -114,21 +122,19 @@ def create_config(output_dir):
         json.dump(meta, fp)
         fp.write("\n")
 
-    pretrained_vad = "vad_multilingual_marblenet"
-    pretrained_speaker_model = "titanet_large"
     config.num_workers = 0
     config.diarizer.manifest_filepath = os.path.join(data_dir, "input_manifest.json")
     config.diarizer.out_dir = output_dir
 
-    config.diarizer.speaker_embeddings.model_path = pretrained_speaker_model
+    config.diarizer.speaker_embeddings.model_path = speaker_model
     config.diarizer.oracle_vad = False
-    config.diarizer.clustering.parameters.oracle_num_speakers = True
+    config.diarizer.clustering.parameters.oracle_num_speakers = oracle_num_speakers
 
-    config.diarizer.vad.model_path = pretrained_vad
-    config.diarizer.vad.parameters.onset = 0.8
-    config.diarizer.vad.parameters.offset = 0.5
-    config.diarizer.vad.parameters.pad_offset = -0.05
-    config.diarizer.msdd_model.model_path = "diar_msdd_telephonic"
+    config.diarizer.vad.model_path = vad_model
+    config.diarizer.vad.parameters.onset = onset
+    config.diarizer.vad.parameters.offset = offset
+    config.diarizer.vad.parameters.pad_offset = pad_offset
+    config.diarizer.msdd_model.model_path = f"diar_msdd_{domain_type}"
 
     return config
 
