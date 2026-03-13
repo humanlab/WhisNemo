@@ -1,24 +1,5 @@
 # WhisNemo Installation Guide
 
-## Quick Install (recommended)
-```bash
-# 1. Create a fresh conda env
-conda create -n whisnemo python=3.10 -y
-conda activate whisnemo
-
-# 2. Clone the repo
-git clone git@github.com:humanlab/WhisNemo.git
-cd WhisNemo
-git checkout dumrania/timing-and-postprocess
-
-# 3. Run the install script (handles all deps in correct order)
-bash install.sh
-
-# 4. Verify
-whisnemo version
-whisnemo diarize -a /path/to/test.wav
-```
-
 ## What install.sh does
 
 The dependency stack is complex (NeMo, WhisperX, Demucs, pyannote, etc.)
