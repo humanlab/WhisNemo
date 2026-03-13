@@ -12,7 +12,7 @@ Demucs vocal separation → Faster-Whisper transcription → CTC forced alignmen
 
 ### Prerequisites
 
-- Python 3.10 or 3.11
+- Python 3.10
 - conda (for FFmpeg installation)
 - NVIDIA GPU with CUDA 11.8 (recommended)
 
