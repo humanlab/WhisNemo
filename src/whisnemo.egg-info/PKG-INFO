@@ -1,0 +1,76 @@
+Metadata-Version: 2.4
+Name: whisnemo
+Version: 0.1.0
+Summary: Whisper + NeMo MSDD pipeline for transcription and speaker diarization
+Author: Dhairya Umrania
+License: MIT
+Project-URL: Homepage, https://github.com/humanlab/WhisNemo
+Project-URL: Repository, https://github.com/humanlab/WhisNemo
+Project-URL: Issues, https://github.com/humanlab/WhisNemo/issues
+Keywords: whisper,nemo,diarization,transcription,asr
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Classifier: Topic :: Multimedia :: Sound/Audio :: Speech
+Requires-Python: ==3.10.*
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy==1.23.5
+Requires-Dist: pandas<3.0,>=1.5
+Requires-Dist: nltk==3.9.1
+Requires-Dist: wget==3.2
+Provides-Extra: diarize
+Requires-Dist: openai-whisper; extra == "diarize"
+Requires-Dist: ctc-forced-aligner @ git+https://github.com/MahmoudAshraf97/ctc-forced-aligner.git ; extra == "diarize"
+Requires-Dist: deepmultilingualpunctuation==1.0.1; extra == "diarize"
+Requires-Dist: demucs==4.0.1; extra == "diarize"
+Requires-Dist: nemo-toolkit[asr]==2.7.2; extra == "diarize"
+Provides-Extra: dev
+Requires-Dist: build>=1.2.2; extra == "dev"
+Requires-Dist: twine>=6.1.0; extra == "dev"
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: cibuildwheel>=2.20; extra == "dev"
+Dynamic: license-file
+
+# WhisNemo
+
+WhisNemo is a Whisper + NeMo MSDD pipeline for transcription and speaker diarization.
+
+## Supported platform
+
+Current supported target:
+
+- Linux x86_64
+- Python 3.10
+
+This package is not yet officially supported on macOS or Windows.
+
+## Install
+
+### Base package
+
+pip install whisnemo
+
+### Full diarization stack
+
+For GPU-enabled Linux install on CUDA 12.8:
+
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+pip install "whisnemo[diarize]"
+
+## CLI
+
+whisnemo version
+whisnemo diarize -a sample.wav
+whisnemo batch -a /path/to/audio_dir --start 1 --end 10
+
+## Notes
+
+- The diarization stack is packaged as an extra: `whisnemo[diarize]`
+- Tested on Linux x86_64 with Python 3.10
+- The current validated setup uses OpenAI Whisper, NeMo 2.7.2, and the upstream `ctc-forced-aligner`
+- GPU support depends on installing a CUDA-compatible PyTorch build before installing the diarization extra
+- For now, the recommended tested install path is Linux first

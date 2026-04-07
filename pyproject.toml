@@ -1,70 +1,55 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "whisnemo"
 version = "0.1.0"
-description = "WhisNemo: Whisper + NeMo MSDD pipeline for audio transcription and speaker diarization"
+description = "Whisper + NeMo MSDD pipeline for transcription and speaker diarization"
 readme = "README.md"
-license = {text = "MIT"}
-requires-python = ">=3.10,<3.12"
+license = { text = "MIT" }
 authors = [
-    {name = "Dhairya Umrania"},
+  { name = "Dhairya Umrania" }
 ]
-keywords = [
-    "whisper", "nemo", "diarization", "transcription",
-    "speaker-diarization", "speech-to-text", "asr",
-]
+requires-python = "==3.10.*"
+keywords = ["whisper", "nemo", "diarization", "transcription", "asr"]
 classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Multimedia :: Sound/Audio :: Speech",
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3.10",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
 
-# -------------------------------------------------------------------------
-# IMPORTANT: These versions are pinned to match the tested working env.
-# torch+torchaudio are NOT listed here - users must install the correct
-# torch+CUDA combo for their system BEFORE installing whisnemo:
-#   pip install torch==2.1.0 torchaudio==2.1.0 --index-url https://download.pytorch.org/whl/cu118
-# -------------------------------------------------------------------------
 dependencies = [
-    "numpy==1.23.5",
-    "faster-whisper==1.0.0",
-    "whisperx @ git+https://github.com/m-bain/whisperX.git@78dcfaab51005aa703ee21375f81ed31bc248560",
-    "ctc-forced-aligner @ git+https://github.com/MahmoudAshraf97/ctc-forced-aligner.git@abd458dd879305566cd4ed0c8624c95f22e3126a",
-    "deepmultilingualpunctuation @ git+https://github.com/oliverguhr/deepmultilingualpunctuation.git@5a0dd7f4fd56687f59405aa8eba1144393d8b74b",
-    "nemo_toolkit[asr]==1.20.0",
-    "huggingface-hub==0.23.2",
-    "transformers==4.39.3",
-    "tokenizers==0.15.2",
-    "safetensors==0.6.2",
-    "omegaconf==2.3.0",
-    "nltk==3.9.1",
-    "wget==3.2",
-    "pandas>=1.5,<3.0",
-    "ffmpeg-python==0.2.0",
-    "demucs @ git+https://github.com/adefossez/demucs.git@b9ab48cad45976ba42b2ff17b229c071f0df9390",
-    "pyannote.audio==3.1.1",
-    "speechbrain==1.0.3",
-    "pytorch-lightning==1.9.4",
+  "numpy==1.23.5",
+  "pandas>=1.5,<3.0",
+  "nltk==3.9.1",
+  "wget==3.2",
 ]
 
 [project.optional-dependencies]
+diarize = [
+  "openai-whisper",
+  "ctc-forced-aligner @ git+https://github.com/MahmoudAshraf97/ctc-forced-aligner.git",
+  "deepmultilingualpunctuation==1.0.1",
+  "demucs==4.0.1",
+  "nemo-toolkit[asr]==2.7.2",
+]
+
 dev = [
-    "pytest>=7.0",
-    "ruff>=0.4",
-    "build",
-    "twine",
+  "build>=1.2.2",
+  "twine>=6.1.0",
+  "pytest>=8.0",
+  "cibuildwheel>=2.20",
 ]
 
 [project.urls]
-Homepage = "https://github.com/humanlab/whisnemo"
-Repository = "https://github.com/humanlab/whisnemo"
+Homepage = "https://github.com/humanlab/WhisNemo"
+Repository = "https://github.com/humanlab/WhisNemo"
+Issues = "https://github.com/humanlab/WhisNemo/issues"
 
 [project.scripts]
 whisnemo = "whisnemo.cli.main:main"
@@ -72,6 +57,9 @@ whisnemo-diarize = "whisnemo.cli.diarize_cli:main"
 whisnemo-batch = "whisnemo.cli.batch_cli:main"
 whisnemo-extract = "whisnemo.cli.extract_cli:main"
 whisnemo-stutter = "whisnemo.cli.stutter_cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]

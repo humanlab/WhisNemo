@@ -1,5 +1,3 @@
 include README.md
-include LICENSE
-include pyproject.toml
 recursive-include src/whisnemo/configs *.yaml
 recursive-include src/whisnemo/scripts *.sh

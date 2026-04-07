@@ -1,0 +1,6 @@
+[console_scripts]
+whisnemo = whisnemo.cli.main:main
+whisnemo-batch = whisnemo.cli.batch_cli:main
+whisnemo-diarize = whisnemo.cli.diarize_cli:main
+whisnemo-extract = whisnemo.cli.extract_cli:main
+whisnemo-stutter = whisnemo.cli.stutter_cli:main

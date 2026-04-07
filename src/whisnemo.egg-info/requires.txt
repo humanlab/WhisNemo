@@ -1,0 +1,17 @@
+numpy==1.23.5
+pandas<3.0,>=1.5
+nltk==3.9.1
+wget==3.2
+
+[dev]
+build>=1.2.2
+twine>=6.1.0
+pytest>=8.0
+cibuildwheel>=2.20
+
+[diarize]
+openai-whisper
+ctc-forced-aligner @ git+https://github.com/MahmoudAshraf97/ctc-forced-aligner.git
+deepmultilingualpunctuation==1.0.1
+demucs==4.0.1
+nemo-toolkit[asr]==2.7.2

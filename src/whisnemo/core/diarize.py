@@ -27,11 +27,14 @@ os.environ.pop('CUDA_PATH', None)
 
 import torch
 import torchaudio
+import soundfile as sf
+import resampy
 from ctc_forced_aligner import (
     generate_emissions,
     get_alignments,
     get_spans,
     load_alignment_model,
+    load_audio,
     postprocess_results,
     preprocess_text,
 )
@@ -53,7 +56,6 @@ from whisnemo.core.helpers import (
 from whisnemo.core.transcription_helpers import transcribe
 from whisnemo.core.timing_utils import setup_timing
 from whisnemo.core.format_srt import format_srt_to_csv
-import whisperx
 
 mtypes = {"cpu": "int8", "cuda": "float16"}
 
@@ -120,20 +122,28 @@ def run_diarize(audio_path, stemming=True, suppress_numerals=False,
         vocal_target, language, model_name,
         mtypes[device], suppress_numerals, device,
     )
-    audio_waveform = whisperx.load_audio(vocal_target)
+
+    audio_waveform, sr = sf.read(vocal_target)
+    if audio_waveform.ndim > 1:
+        audio_waveform = audio_waveform.mean(axis=1)
+    if sr != 16000:
+        audio_waveform = resampy.resample(audio_waveform, sr, 16000)
+        sr = 16000
+    audio_waveform = audio_waveform.astype("float32")
+
     end_time = time.time()
     log_timing("whisper_transcription", start_time, end_time)
 
     # --- 3. CTC forced alignment ---
     start_time = time.time()
-    alignment_model, alignment_tokenizer, alignment_dictionary = load_alignment_model(
+    alignment_model, alignment_tokenizer = load_alignment_model(
         device, dtype=torch.float16 if device == "cuda" else torch.float32,
     )
 
-    audio_waveform = (
-        torch.from_numpy(audio_waveform)
-        .to(alignment_model.dtype)
-        .to(alignment_model.device)
+    audio_waveform = load_audio(
+        vocal_target,
+        alignment_model.dtype,
+        alignment_model.device,
     )
     emissions, stride = generate_emissions(
         alignment_model, audio_waveform, batch_size=batch_size
@@ -148,11 +158,11 @@ def run_diarize(audio_path, stemming=True, suppress_numerals=False,
         full_transcript, romanize=True, language=langs_to_iso[language_detected],
     )
 
-    segments, scores, blank_id = get_alignments(
-        emissions, tokens_starred, alignment_dictionary,
+    segments, scores, blank_token = get_alignments(
+        emissions, tokens_starred, alignment_tokenizer,
     )
 
-    spans = get_spans(tokens_starred, segments, alignment_tokenizer.decode(blank_id))
+    spans = get_spans(tokens_starred, segments, blank_token)
     word_timestamps = postprocess_results(text_starred, spans, stride, scores)
     end_time = time.time()
     log_timing("forced_alignment", start_time, end_time)
@@ -162,10 +172,10 @@ def run_diarize(audio_path, stemming=True, suppress_numerals=False,
     ROOT = os.getcwd()
     temp_path = os.path.join(ROOT, "temp_outputs")
     os.makedirs(temp_path, exist_ok=True)
-    torchaudio.save(
+    sf.write(
         os.path.join(temp_path, "mono_file.wav"),
-        audio_waveform.cpu().unsqueeze(0).float(),
-        16000, channels_first=True,
+        audio_waveform.detach().float().cpu().numpy(),
+        16000,
     )
     end_time = time.time()
     log_timing("audio_conversion_mono", start_time, end_time)
@@ -210,7 +220,7 @@ def run_diarize(audio_path, stemming=True, suppress_numerals=False,
     if language_detected in punct_model_langs:
         punct_model = PunctuationModel(model="kredor/punctuate-all")
         words_list = list(map(lambda x: x["word"], wsm))
-        labled_words = punct_model.predict(words_list, chunk_size=230)
+        labled_words = punct_model.predict(words_list)
 
         ending_puncts = ".?!"
         model_puncts = ".,;:!?"
