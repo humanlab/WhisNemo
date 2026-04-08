@@ -33,7 +33,6 @@ dependencies = [
 [project.optional-dependencies]
 diarize = [
   "openai-whisper",
-  "ctc-forced-aligner @ git+https://github.com/MahmoudAshraf97/ctc-forced-aligner.git",
   "deepmultilingualpunctuation==1.0.1",
   "demucs==4.0.1",
   "nemo-toolkit[asr]==2.7.2",

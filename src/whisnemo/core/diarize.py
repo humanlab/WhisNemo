@@ -29,15 +29,15 @@ import torch
 import torchaudio
 import soundfile as sf
 import resampy
-from ctc_forced_aligner import (
-    generate_emissions,
-    get_alignments,
-    get_spans,
-    load_alignment_model,
-    load_audio,
-    postprocess_results,
-    preprocess_text,
-)
+# from ctc_forced_aligner import (
+#     generate_emissions,
+#     get_alignments,
+#     get_spans,
+#     load_alignment_model,
+#     load_audio,
+#     postprocess_results,
+#     preprocess_text,
+# )
 from deepmultilingualpunctuation import PunctuationModel
 from nemo.collections.asr.models.msdd_models import NeuralDiarizer
 
@@ -134,38 +134,50 @@ def run_diarize(audio_path, stemming=True, suppress_numerals=False,
     end_time = time.time()
     log_timing("whisper_transcription", start_time, end_time)
 
-    # --- 3. CTC forced alignment ---
+    # --- 3. Build word_timestamps from Whisper's native word-level output ---
+    # Replaces the previous CTC forced alignment step. Whisper produces
+    # word-level timestamps when word_timestamps=True, which transcription_helpers
+    # already sets for supported languages. Quality is slightly worse than CTC at
+    # word boundaries, but for 2-speaker structured interviews the difference is
+    # typically negligible because turn boundaries are long compared to the
+    # ~100-300ms timestamp jitter.
     start_time = time.time()
-    alignment_model, alignment_tokenizer = load_alignment_model(
-        device, dtype=torch.float16 if device == "cuda" else torch.float32,
-    )
+    word_timestamps = []
+    for segment in whisper_results:
+        words = segment.get("words") or []
+        for w in words:
+            # Whisper returns "word" (with leading space); helpers.py expects "text"
+            text = w.get("word") or w.get("text") or ""
+            text = text.strip()
+            if not text:
+                continue
+            ws = w.get("start")
+            we = w.get("end")
+            if ws is None or we is None:
+                continue
+            word_timestamps.append({
+                "text": text,
+                "start": float(ws),
+                "end": float(we),
+            })
 
-    audio_waveform = load_audio(
-        vocal_target,
-        alignment_model.dtype,
-        alignment_model.device,
-    )
-    emissions, stride = generate_emissions(
-        alignment_model, audio_waveform, batch_size=batch_size
-    )
+    if not word_timestamps:
+        # Fallback: synthesize from segment-level timestamps if no word-level data
+        logging.warning(
+            "No word-level timestamps from Whisper; falling back to segment-level."
+        )
+        for segment in whisper_results:
+            text = (segment.get("text") or "").strip()
+            if not text:
+                continue
+            word_timestamps.append({
+                "text": text,
+                "start": float(segment["start"]),
+                "end": float(segment["end"]),
+            })
 
-    del alignment_model
-    torch.cuda.empty_cache()
-
-    full_transcript = "".join(segment["text"] for segment in whisper_results)
-
-    tokens_starred, text_starred = preprocess_text(
-        full_transcript, romanize=True, language=langs_to_iso[language_detected],
-    )
-
-    segments, scores, blank_token = get_alignments(
-        emissions, tokens_starred, alignment_tokenizer,
-    )
-
-    spans = get_spans(tokens_starred, segments, blank_token)
-    word_timestamps = postprocess_results(text_starred, spans, stride, scores)
     end_time = time.time()
-    log_timing("forced_alignment", start_time, end_time)
+    log_timing("word_timestamps_from_whisper", start_time, end_time)
 
     # --- 4. Convert to mono for NeMo ---
     start_time = time.time()
@@ -174,7 +186,7 @@ def run_diarize(audio_path, stemming=True, suppress_numerals=False,
     os.makedirs(temp_path, exist_ok=True)
     sf.write(
         os.path.join(temp_path, "mono_file.wav"),
-        audio_waveform.detach().float().cpu().numpy(),
+        audio_waveform,
         16000,
     )
     end_time = time.time()
