@@ -98,7 +98,7 @@ def run_diarize(audio_path, stemming=True, suppress_numerals=False,
     start_time = time.time()
     if stemming:
         return_code = os.system(
-            f'python3 -m demucs.separate -n htdemucs --two-stems=vocals "{audio_path}" -o "temp_outputs"'
+            f'"{sys.executable}" -m demucs.separate -n htdemucs --two-stems=vocals "{audio_path}" -o "temp_outputs"'
         )
         if return_code != 0:
             logging.warning(
