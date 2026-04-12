@@ -57,7 +57,70 @@ from whisnemo.core.transcription_helpers import transcribe
 from whisnemo.core.timing_utils import setup_timing
 from whisnemo.core.format_srt import format_srt_to_csv
 
-mtypes = {"cpu": "int8", "cuda": "float16"}
+mtypes = {"cpu": "int8", "cuda": "float16", "mps": "float32"}
+
+# --- MPS compatibility patches ---
+# Apple Silicon MPS backend has two known issues with our upstream dependencies
+# that we patch at runtime when device="mps" is requested. These patches are
+# no-ops on cpu and cuda, so they only activate when actually needed.
+#
+# 1. openai-whisper: whisper.timing.dtw calls .double() on an MPS tensor, which
+#    fails because MPS does not support float64. We reorder the cast so the move
+#    to CPU happens before the cast to double.
+#
+# 2. nemo-toolkit: MSDD_module.conv_scale_weights uses .view() on a tensor that
+#    is non-contiguous on MPS after the preceding convolutions. On CUDA the
+#    memory layout happens to be contiguous and .view() works by accident. We
+#    replace .view() with .reshape() which handles both cases correctly.
+#
+# Both patches are idempotent via _MPS_PATCHES_APPLIED.
+_MPS_PATCHES_APPLIED = False
+
+def _apply_mps_patches():
+    """Apply runtime patches for MPS compatibility. Idempotent."""
+    global _MPS_PATCHES_APPLIED
+    if _MPS_PATCHES_APPLIED:
+        return
+    # Ensure PyTorch MPS fallback is enabled for any unsupported ops
+    os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+
+    # Patch 1: openai-whisper dtw float64 incompatibility
+    import whisper.timing as _whisper_timing
+    _dtw_cpu = _whisper_timing.dtw_cpu
+    def _patched_dtw(x):
+        return _dtw_cpu(x.cpu().double().numpy())
+    _whisper_timing.dtw = _patched_dtw
+
+    # Patch 2: NeMo MSDD_module.conv_scale_weights view/reshape
+    import torch.nn.functional as F
+    from nemo.collections.asr.modules.msdd_diarizer import MSDD_module
+
+    def _patched_conv_scale_weights(self, ms_avg_embs_perm, ms_emb_seq_single):
+        ms_cnn_input_seq = torch.cat([ms_avg_embs_perm, ms_emb_seq_single], dim=2)
+        ms_cnn_input_seq = ms_cnn_input_seq.unsqueeze(2).flatten(0, 1)
+        conv_out = self.conv_forward(
+            ms_cnn_input_seq, conv_module=self.conv[0], bn_module=self.conv_bn[0], first_layer=True
+        )
+        for conv_idx in range(1, self.conv_repeat + 1):
+            conv_out = self.conv_forward(
+                conv_input=conv_out,
+                conv_module=self.conv[conv_idx],
+                bn_module=self.conv_bn[conv_idx],
+                first_layer=False,
+            )
+        # .view() fails on non-contiguous MPS tensors; .reshape() handles both
+        lin_input_seq = conv_out.reshape(self.batch_size, self.length, self.cnn_output_ch * self.emb_dim)
+        hidden_seq = self.conv_to_linear(lin_input_seq)
+        hidden_seq = self.dropout(F.leaky_relu(hidden_seq))
+        scale_weights = self.softmax(self.linear_to_weights(hidden_seq))
+        scale_weights = scale_weights.unsqueeze(3).expand(-1, -1, -1, self.num_spks)
+        return scale_weights
+
+    MSDD_module.conv_scale_weights = _patched_conv_scale_weights
+
+    _MPS_PATCHES_APPLIED = True
+    logging.info("Applied MPS compatibility patches for whisper and nemo-toolkit")
+
 
 
 def run_diarize(audio_path, stemming=True, suppress_numerals=False,
@@ -88,6 +151,11 @@ def run_diarize(audio_path, stemming=True, suppress_numerals=False,
         onset/offset/pad_offset: VAD parameters.
         domain_type: NeMo config domain type (telephonic, meeting, general).
     """
+    # Apply MPS compatibility patches if running on Apple Silicon.
+    # No-op on cpu and cuda.
+    if device == "mps":
+        _apply_mps_patches()
+
     if output_formats is None:
         output_formats = ["csv"]
 
