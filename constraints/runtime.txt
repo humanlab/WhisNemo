@@ -1,0 +1,19 @@
+# Constraints file for installing whisnemo[diarize].
+#
+# Pip's resolver, when installing nemo-toolkit and its transitive
+# dependencies, will otherwise upgrade torch and numpy to versions that
+# break other pinned packages in the diarize stack. Pinning them here
+# forces pip to find a compatible install plan around these versions.
+#
+# These pins have been validated on Linux x86_64 with CUDA 12.8,
+# Windows x86_64 with CUDA 12.4, and macOS arm64 with MPS, all using
+# torch 2.11.0. Windows users on older NVIDIA drivers (driver CUDA < 12.8)
+# can use torch 2.6.0+cu124 - the rest of the constraints still apply.
+#
+# Usage:
+#   pip install torch==2.11.0 torchaudio==2.11.0 [--index-url ...]
+#   pip install -c constraints/runtime.txt "whisnemo[diarize] @ git+https://github.com/humanlab/WhisNemo.git"
+
+torch==2.11.0
+torchaudio==2.11.0
+numpy==1.23.5
