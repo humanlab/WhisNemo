@@ -130,11 +130,11 @@ install succeeded.
   macOS is validated on Apple Silicon with MPS.
 
 ## CLI
-
+```bash
 whisnemo version
 whisnemo diarize -a sample.wav
 whisnemo batch -a /path/to/audio_dir --start 1 --end 10
-
+```
 
 ## Notes
 
