@@ -122,6 +122,45 @@ def _apply_mps_patches():
     logging.info("Applied MPS compatibility patches for whisper and nemo-toolkit")
 
 
+def _normalize_device(device):
+    """Return a device string that is actually available on this machine.
+
+    If "cuda" is requested but unavailable (e.g. on macOS), fall back to
+    "mps" if available, otherwise "cpu". This prevents NeMo from calling
+    CUDA-only APIs on a machine without CUDA. No-op when the requested
+    device is available.
+    """
+    if device == "cuda" and not torch.cuda.is_available():
+        if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+            logging.warning("CUDA not available; falling back to MPS (Apple Silicon).")
+            return "mps"
+        logging.warning("CUDA not available; falling back to CPU.")
+        return "cpu"
+    if device == "mps" and not (
+        getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available()
+    ):
+        logging.warning("MPS not available; falling back to CPU.")
+        return "cpu"
+    return device
+
+
+def _set_macos_multiprocessing():
+    """On macOS, force the 'spawn' multiprocessing start method.
+
+    NeMo's diarization uses fork-based multiprocessing, which is unsafe on
+    macOS once OpenMP / threaded libraries are loaded and can cause segfaults.
+    Using 'spawn' avoids this. No-op on Linux/Windows (which keep 'fork',
+    the faster default). force=True makes this safe to call repeatedly.
+    """
+    if sys.platform == "darwin":
+        import multiprocessing
+        try:
+            multiprocessing.set_start_method("spawn", force=True)
+            logging.info("Set multiprocessing start method to 'spawn' for macOS.")
+        except RuntimeError:
+            pass
+
+
 
 def run_diarize(audio_path, stemming=True, suppress_numerals=False,
                 model_name="medium.en", batch_size=8, language=None,
@@ -151,6 +190,13 @@ def run_diarize(audio_path, stemming=True, suppress_numerals=False,
         onset/offset/pad_offset: VAD parameters.
         domain_type: NeMo config domain type (telephonic, meeting, general).
     """
+    # Normalize the device: fall back gracefully if the requested
+    # accelerator isn't available (e.g. "cuda" requested on a Mac).
+    device = _normalize_device(device)
+
+    # On macOS, NeMo's fork-based multiprocessing can segfault; use spawn.
+    _set_macos_multiprocessing()
+
     # Apply MPS compatibility patches if running on Apple Silicon.
     # No-op on cpu and cuda.
     if device == "mps":

@@ -121,10 +121,18 @@ install succeeded.
 ### Known limitations
 
 - **Demucs vocal separation** is affected by a `torchcodec` / CUDA
-  runtime compatibility issue on Linux, Windows, and macOS. When this
-  occurs, the pipeline falls back gracefully to running on the original
-  audio without vocal pre-separation. To explicitly disable Demucs and
-  suppress the warning, pass `stemming=False` when calling `run_diarize`.
+  runtime compatibility issue (`libnvrtc.so.13`) on Linux, Windows, and
+  macOS. When this occurs, the pipeline falls back gracefully to running
+  on the original audio without vocal pre-separation. To explicitly
+  disable Demucs and suppress the warning, pass `stemming=False` when
+  calling `run_diarize`. A fix is in progress; for most interview audio
+  the impact is minimal since vocal separation is a pre-processing aid
+  rather than a requirement.
+- **macOS MPS transcript segments.** On Apple Silicon with `device="mps"`,
+  Whisper can occasionally drop short transcript segments on some files.
+  The same files transcribe completely on Linux and Windows (CUDA) and on
+  macOS with `device="cpu"`. This is under investigation. If you see
+  missing content on a Mac, use `device="cpu"`.
 - **GPU validation is per-platform.** Linux is validated on an NVIDIA
   A6000. Windows is validated on an RTX 4060 with torch 2.6.0+cu124.
   macOS is validated on Apple Silicon with MPS.
