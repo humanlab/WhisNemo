@@ -231,10 +231,22 @@ def run_diarize(audio_path, stemming=True, suppress_numerals=False,
     log_timing("audio_preprocessing_stemming", start_time, end_time)
 
     # --- 2. Whisper transcription (non-batched) ---
+    # openai-whisper's decode loop on MPS skips ahead in its internal seek
+    # loop and drops large spans of audio (~half the transcript on some
+    # files). The bug is specific to the MPS transcription path, so we run
+    # transcription on CPU when device is "mps". NeMo diarization below
+    # still runs on MPS, so we keep the GPU speedup where it is safe.
+    transcribe_device = "cpu" if device == "mps" else device
+    if transcribe_device != device:
+        logging.info(
+            "Running Whisper transcription on CPU (device=%s) to avoid the "
+            "MPS decode-loop content-dropping bug; diarization still uses %s.",
+            transcribe_device, device,
+        )
     start_time = time.time()
     whisper_results, language_detected = transcribe(
         vocal_target, language, model_name,
-        mtypes[device], suppress_numerals, device,
+        mtypes[transcribe_device], suppress_numerals, transcribe_device,
     )
 
     audio_waveform, sr = sf.read(vocal_target)
