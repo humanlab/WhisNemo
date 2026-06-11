@@ -38,6 +38,13 @@ diarize = [
   "nemo-toolkit[asr]==2.7.2",
 ]
 
+embed = [
+  "transformers",
+  "soundfile",
+  "librosa",
+  "pandas>=1.5,<3.0",
+]
+
 dev = [
   "build>=1.2.2",
   "twine>=6.1.0",
