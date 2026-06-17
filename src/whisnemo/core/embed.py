@@ -147,20 +147,36 @@ def _preprocess_clip(clip_path):
 # ---------------------------------------------------------------------------
 # WhiSPA backend
 # ---------------------------------------------------------------------------
-def _ensure_whispa_importable(whispa_repo_path):
-    """Make the WhiSPA repo importable. Returns the WhiSPAModel class."""
-    if whispa_repo_path and whispa_repo_path not in sys.path:
-        sys.path.append(whispa_repo_path)
+def _ensure_whispa_importable(whispa_repo_path=None):
+    """Make the WhiSPA repo importable. Returns the WhiSPAModel class.
+
+    Prefers a pip-installed WhiSPA (import works directly). If that fails and
+    a whispa_repo_path is provided, falls back to appending that local clone
+    path to sys.path and retrying. This lets the module work on any machine
+    where WhiSPA is pip-installed, while still supporting a local clone.
+    """
     try:
         from pretrain.whispa_model import WhiSPAModel  # noqa: E402
         return WhiSPAModel
-    except ImportError as e:
-        raise ImportError(
-            "Could not import WhiSPA. Either install it (pip install "
-            "git+https://github.com/humanlab/WhiSPA.git) or pass "
-            "whispa_repo_path pointing at a local clone of the WhiSPA repo. "
-            f"Underlying error: {e}"
-        )
+    except ImportError:
+        pass
+
+    if whispa_repo_path and whispa_repo_path not in sys.path:
+        sys.path.append(whispa_repo_path)
+        try:
+            from pretrain.whispa_model import WhiSPAModel  # noqa: E402
+            return WhiSPAModel
+        except ImportError as e:
+            raise ImportError(
+                "Could not import WhiSPA from the provided whispa_repo_path "
+                f"({whispa_repo_path}). Underlying error: {e}"
+            )
+
+    raise ImportError(
+        "Could not import WhiSPA. Install it with "
+        "'pip install git+https://github.com/humanlab/WhiSPA.git' "
+        "or pass whispa_repo_path pointing at a local clone of the WhiSPA repo."
+    )
 
 
 def _extract_whispa(
